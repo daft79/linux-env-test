@@ -1,0 +1,54 @@
+name: test
+
+on:
+    workflow_dispatch:
+        inputs:
+            runner:
+                required: true
+                default: "ubuntu-latest"
+
+jobs:
+    run:
+        runs-on: ${{ github.event.inputs.runner }}
+        permissions: write-all
+        steps:                  
+            - name: Cleanup storage
+              uses: rokibhasansagar/slimhub_actions@main
+
+            - name: Tailscale
+              uses: tailscale/github-action@v4
+              with:
+                  oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+                  oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+                  tags: tag:ci
+                  version: latest
+
+            - name: install packages
+              run: |
+                  sudo apt update
+                  sudo apt upgrade -y
+                  sudo apt install wireguard-tools neovim -y
+
+            - name: add public key
+              run: |
+                  mkdir -p ~/.ssh
+                  curl -s https://github.com/${{ github.actor }}.keys >> ~/.ssh/authorized_keys
+
+            - name: ssh
+              env:
+                  WG_CONF: ${{ secrets.WG_CONF }}
+              run: |
+                  git config --global user.name daft79
+                  git config --global user.email 304871112+daft79@users.noreply.github.com
+                  cp /etc/environment $GITHUB_WORKSPACE/environment.bak
+                  sudo sed -i '2,$d' /etc/environment
+                  echo $WG_CONF | base64 -d | unzstd > wg0.conf
+                  sleep infinity || true
+                  sudo cp $GITHUB_WORKSPACE/environment.bak /etc/environment
+
+            - name: Upload artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  path: artifacts/*
+                  compression-level: 9
